@@ -41,33 +41,70 @@
 
 #ifdef ESP8266
 #include "ESP8266WiFi.h"
+#include <FS.h>
+#include <LittleFS.h>
+
+#define FSYS LittleFS
+
 extern "C" {
 #include "user_interface.h"
 }
 #endif
 
+#include <Adafruit_GFX.h>    // Core graphics library
+
+#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
-#include <TFT_eSPI.h> // Hardware-specific library
+
+typedef Adafruit_ST7789 displayType;
+
+  #define TFT_CS         4
+  #define TFT_RST        16                                            
+  #define TFT_DC         5
+
+  #define TFT_CS2        2 
+  #define TFT_RST2       12 
+
+/* esp connections:
+ *  SCk 14
+ *  SDA 13 
+ *  RST 16
+ *  DC   5
+ *  LCD  nc
+ *  CS   4
+ * At init screen is reset, so thaty cannot share a reset pin, the first screen
+ * will be initialized when the second screen does a reset as part of the init.
+ */
+
+
 
 // Enable ONE of these #includes for the various eyes:
-#include "defaultEye.h"        // Standard human-ish hazel eye
+  #include "defaultEye.h"        // Standard human-ish hazel eye
 //#include "noScleraEye.h"       // Large iris, no sclera
 //#include "dragonEye.h"         // Slit pupil fiery dragon/demon eye
 //#include "goatEye.h"           // Horizontal pupil goat/Krampus eye
 
-#ifdef ESP8266
-#define DISPLAY_DC      5 // Data/command pin for BOTH displays
-#define DISPLAY_RESET   16 // Reset pin for BOTH displays
-#define SELECT_L_PIN    2 // LEFT eye chip select pin
-#define SELECT_R_PIN    2 // RIGHT eye chip select pin
+#define PIXEL_DOUBLE
+#ifdef PIXEL_DOUBLE
+  // For the 240x240 TFT, pixels are rendered in 2x2 blocks for an
+  // effective resolution of 120x120. M0 boards just don't have the
+  // space or speed to handle an eye at the full resolution of this
+  // display (and for M4 boards, take a look at the M4_Eyes project
+  // instead). 120x120 doesn't quite match the resolution of the
+  // TFT & OLED this project was originally developed for. Rather
+  // than make an entirely new alternate set of graphics for every
+  // eye (would be a huge undertaking), this currently just crops
+  // four pixels all around the perimeter.
+  #define SCREEN_X_START 4
+  #define SCREEN_X_END   (SCREEN_WIDTH - 4)
+  #define SCREEN_Y_START 4
+  #define SCREEN_Y_END   (SCREEN_HEIGHT - 4)
+#else
+  #define SCREEN_X_START 0
+  #define SCREEN_X_END   SCREEN_WIDTH
+  #define SCREEN_Y_START 0
+  #define SCREEN_Y_END   SCREEN_HEIGHT
 #endif
-#ifdef ESP32
-#define DISPLAY_DC      13 // Data/command pin for BOTH displays
-#define DISPLAY_RESET   14 // Reset pin for BOTH displays
-#define SELECT_L_PIN     4 // LEFT eye chip select pin
-#define SELECT_R_PIN     4 // D8 // RIGHT eye chip select pin
-#endif
-// INPUT CONFIG (for eye motion -- enable or comment out as needed) --------
 
 // The ESP8266 is rather constrained here as it only has one analogue port.
 // An I2C ADC could be used for more analogue channels
@@ -83,7 +120,8 @@ extern "C" {
 #define IRIS_MAX      260 // Clip upper "
 #define WINK_L_PIN      0 // Pin for LEFT eye wink button
 #define BLINK_PIN       0 // Pin for blink button (BOTH eyes)
-#define WINK_R_PIN      2 // Pin for RIGHT eye wink button
+#define WINK_R_PIN      0 // Pin for RIGHT eye wink button
+
 #define AUTOBLINK       1  // If enabled, eyes blink autonomously
 
 // Probably don't need to edit any config below this line, -----------------
@@ -102,12 +140,13 @@ typedef struct {
 } eyeBlink;
 
 struct {
-  TFT_eSPI tft; // OLED/eye[e].tft object
+  displayType tft; // OLED/eye[e].tft object
   uint8_t     cs;      // Chip select pin
   eyeBlink    blink;   // Current blink state
+  uint16_t    bgcolor;
 } eye[] = { // OK to comment out one of these for single-eye display:
-  {TFT_eSPI(),SELECT_L_PIN,{WINK_L_PIN,NOBLINK}}//,
-  //{ eye[0].tft,SELECT_R_PIN,{WINK_R_PIN,NOBLINK}}
+  displayType(TFT_CS,TFT_DC, TFT_RST),TFT_CS,{WINK_L_PIN,NOBLINK},ST77XX_BLACK, 
+  displayType(TFT_CS2,TFT_DC,TFT_RST2),TFT_CS2,{WINK_R_PIN,NOBLINK},ST77XX_BLACK
 };
 
 #define NUM_EYES (sizeof(eye) / sizeof(eye[0]))
@@ -132,18 +171,45 @@ void setup(void) {
     randomSeed(analogRead(A0)); 
 #endif
 
-  eye[e].tft.init();
-  eye[e].tft.fillScreen(TFT_BLACK);
-  eye[e].tft.setRotation(1);
+  if (! FSYS.begin()) {
+    Serial.printf("Unable to begin() LittleFS, aborting\n");
+  }else{
+    listDir("/",0);
+  }
+  for ( e = 0; e < NUM_EYES; ++e ){
 
-  Serial.printf( "\nNori\'s Grote Oog \nscreen width %d Screen height %d\n", eye[e].tft.width(),eye[e].tft.height() );
+    digitalWrite( eye[e].cs, LOW);    
+    eye[e].tft.init(240,240);
+    eye[e].tft.setSPISpeed(40000000);
+    eye[e].tft.setRotation( 2 ); 
+    eye[e].tft.fillScreen( eye[e].bgcolor );
+        
+    delay(2000);
+   }
+
+    eye[0].tft.startWrite();
+    uint8_t madctl=0;
+    madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;    
+    eye[0].tft.sendCommand( ST77XX_MADCTL,&madctl,1 ); 
+    eye[0].tft.endWrite();
+  
+  Serial.printf( "\nNori\'s Grote Oog \nscreen width %d Screen height %d\n", eye[0].tft.width(),eye[0].tft.height() );
+  Serial.printf( "CS 0 : %d, CS 1 : %d\n", eye[0].cs,eye[1].cs );
+  
   fstart = millis()-1; // Subtract 1 to avoid divide by zero late
 }
 
 
 // EYE-RENDERING FUNCTION --------------------------------------------------
 
-#define BUFFER_SIZE 512//256 // 64 to 512 seems optimum = 30 fps for default eye
+#ifdef PIXEL_DOUBLE
+    #define BUFFER_SIZE 240
+#else
+    #define BUFFER_SIZE 4096 * 4 //256 // 64 to 512 seems optimum = 30 fps for default eye
+#endif
+  
+uint16_t pbuffer[BUFFER_SIZE]; // This one needs to be 16 bit
+
 
 void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
 
@@ -164,8 +230,12 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   uint32_t d;
 
   uint32_t pixels = 0;
-  uint16_t pbuffer[BUFFER_SIZE]; // This one needs to be 16 bit
-  
+
+#ifdef PIXEL_DOUBLE
+  scleraX += 4;
+  scleraY += 4;
+#endif
+
   // Set up raw pixel dump to entire screen.  Although such writes can wrap
   // around automatically from end of rect back to beginning, the region is
   // reset on each frame here in case of an SPI glitch.
@@ -175,28 +245,35 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   // ST7735 eye[e].tft.setAddrWindow(25, 0, 128, 160);
   //eye[e].tft.setAddrWindow(50, 40, 128, 160);// screenw&h 128
   //eye[e].tft.setAddrWindow(55, 20, 20, 20);//blurb
-  switch(e){
-  case 0:
-    
-    eye[e].tft.setAddrWindow(96, 56, 128, 128);// screenw&h 128
-    //screen_HEIGHT = 200;
-    //screen_WIDTH  = 160;
-    break;
- case 1:   
-    eye[e].tft.setAddrWindow(180, 60, 128, 128);// screenw&h 128
-    break;
- }
+#ifdef PIXEL_DOUBLE
+ eye[e].tft.startWrite();
+  eye[e].tft.setAddrWindow(0, 0, 240, 240);
+ eye[e].tft.endWrite();
+#else
+ eye[e].tft.startWrite();
+  eye[e].tft.setAddrWindow(65, 65, 128, 128);// screenw&h 128
+ eye[e].tft.endWrite();
+#endif  
+  
   // Now just issue raw 16-bit values for every pixel...
 
-  scleraXsave = scleraX; // Save initial X value to reset on each line
-  irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
-  for(screenY=0; screenY<screen_HEIGHT; screenY++, scleraY++, irisY++) {
-    scleraX = scleraXsave;
-    irisX   = scleraXsave - (SCLERA_WIDTH - IRIS_WIDTH) / 2;
-    for(screenX=0; screenX<screen_WIDTH; screenX++, scleraX++, irisX++) {
-      if((pgm_read_byte(lower + screenY * screen_WIDTH + screenX) <= lT) ||
+   //scleraXsave = scleraX; // Save initial X value to reset on each line
+   //irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
+   //for(screenY=0; screenY<screen_HEIGHT; screenY++, scleraY++, irisY++) {
+   // scleraX = scleraXsave;
+   // irisX   = scleraXsave - (SCLERA_WIDTH - IRIS_WIDTH) / 2;
+   // for(screenX=0; screenX<screen_WIDTH; screenX++, scleraX++, irisX++) {
+      scleraXsave = scleraX + SCREEN_X_START; // Save initial X value to reset on each line
+      irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
+      for(screenY=SCREEN_Y_START; screenY<SCREEN_Y_END; screenY++, scleraY++, irisY++) {
+        scleraX = scleraXsave;
+        irisX   = scleraXsave - (SCLERA_WIDTH - IRIS_WIDTH) / 2;
+        for(screenX=SCREEN_X_START; screenX<SCREEN_X_END; screenX++, scleraX++, irisX++) {
+      
+        if((pgm_read_byte(lower + screenY * screen_WIDTH + screenX) <= lT) ||
          (pgm_read_byte(upper + screenY * screen_WIDTH + screenX) <= uT)) {             // Covered by eyelid
-        p = 0;
+        //p = 0;
+        p = eye[e].bgcolor;
       } else if((irisY < 0) || (irisY >= IRIS_HEIGHT) ||
                 (irisX < 0) || (irisX >= IRIS_WIDTH)) { // In sclera
         p = pgm_read_word(sclera + scleraY * SCLERA_WIDTH + scleraX);
@@ -210,18 +287,35 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
           p = pgm_read_word(sclera + scleraY * SCLERA_WIDTH + scleraX);                 // Pixel = sclera
         }
       }
-      *(pbuffer + pixels++) = p>>8 | p<<8;
-
+      *(pbuffer + pixels++) = p;
+#ifdef PIXEL_DOUBLE
+      *(pbuffer + pixels++) = p; //p>>8 | p<<8;
+#endif
       if (pixels >= BUFFER_SIZE) { 
-        yield(); eye[e].tft.pushColors((uint8_t*)pbuffer, pixels*2); 
-        pixels = 0;
+
+
+            eye[e].tft.startWrite();
+              
+//              for (uint16_t i = 0; i < BUFFER_SIZE; i++)SPI.write16(pbuffer[i]);
+            
+            eye[e].tft.writePixels(pbuffer, sizeof(pbuffer)/2 );
+#ifdef PIXEL_DOUBLE
+            eye[e].tft.writePixels(pbuffer, sizeof(pbuffer)/2 );
+#endif
+            eye[e].tft.endWrite();
+      
+            yield(); //   eye[e].tft.pushColors((uint8_t*)pbuffer, pixels*2); 
+            pixels = 0;
       }
     }
   }
 
-   if (pixels) { Serial.println("restje!");eye[e].tft.pushColors(pbuffer, pixels); pixels = 0;}
-}
-
+   if (pixels) { Serial.println("restje!");//eye[e].tft.pushColors(pbuffer, pixels); pixels = 0;}
+   //eye[e].tft.endWrite();
+     
+  
+  }
+ }
 
 // EYE ANIMATION -----------------------------------------------------------
 
@@ -247,8 +341,9 @@ const uint8_t ease[] = { // Ease in/out curve for eye movements 3*t^2-2*t^3
 uint32_t timeOfLastBlink = 0L, timeToNextBlink = 0L;
 #endif
 
-void frame( // Process motion for a single frame of left or right eye
-  uint32_t        iScale) {     // Iris scale (0-1023) passed in
+void frame( uint32_t iScale)
+{ // Iris scale (0-1023) passed in
+
   static uint32_t frames   = 0; // Used in frame rate calculation
   static uint8_t  eyeIndex = 0; // eye[] array counter
   int32_t         eyeX, eyeY;
@@ -411,6 +506,7 @@ void frame( // Process motion for a single frame of left or right eye
   // Pass all the derived values to the eye-rendering function:
   drawEye(eyeIndex, iScale, eyeX, eyeY, n, lThreshold);
 
+  
 }
 
 
