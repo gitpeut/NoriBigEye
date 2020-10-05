@@ -1,6 +1,9 @@
 # NoriBigEye
  UncannyEyesExample of tft_eSPI library reworked
  
+ This is an ESP8266 project. It uses all but 2 GPIO's (0 and A0).
+ Results seem to improve if the ESP8266 is run at 160MHz.
+ 
  Now works on 2 screens, which was not supported by the tft_eSPI
  unfortunately. Now, the Adafruit GFX lib is used.
 
