@@ -11,6 +11,7 @@
 
  The left eye ( seen from the front) is mirrored by telling the left display
  to have the X coordinate start at the right side.
+ 
    <code>
    madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;    
    eye[0].tft.sendCommand( ST77XX_MADCTL,&madctl,1 ); 
@@ -19,13 +20,12 @@
  Also ported pixel doubling from https://learn.adafruit.com/animated-electronic-eyes/overview
  This gives a scarier effect, which is the point I think.
  
- The graphics files from that project have been converted to a format,this (older) version
- of the uncanny eyes using tablegen_oldstyle.py in the convert directory. 
+ The graphics files from that project have been converted to a format this (older) version
+ of the uncanny eyes project understands, using tablegen_oldstyle.py in the convert directory. 
  For original graphics see the original code at https://github.com/adafruit/Uncanny_Eyes
  
  Eyes are made to react on a proximity sensor which publishes it's status on mqtt.
  
-
  Wifi SSID and password, mqtt server, username and passwordare stored in a headerfile
  wificredentials.h, which should contain the following variables with your own info:
 
