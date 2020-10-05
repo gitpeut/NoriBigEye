@@ -43,8 +43,15 @@
 #include "ESP8266WiFi.h"
 #include <FS.h>
 #include <LittleFS.h>
-
+#include <wificredentials.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #define FSYS LittleFS
+
+WiFiClient mqWifiClient;
+PubSubClient mqclient(mqWifiClient);
+bool       mqEyes   = true;
+bool       eyeState = true;
 
 extern "C" {
 #include "user_interface.h"
@@ -56,22 +63,32 @@ extern "C" {
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
 
+const char *esphostname = "NoriBigEyes";                                 
+
 typedef Adafruit_ST7789 displayType;
 
   #define TFT_CS         4
   #define TFT_RST        16                                            
   #define TFT_DC         5
 
-  #define TFT_CS2        2 
+  #define TFT_CS2        15
   #define TFT_RST2       12 
+  #define TFT_LCD         2
 
-/* esp connections:
+/*  connections:
+ *  Left Screen:
+ *  CS   4
+ *  RST 16
+ *  Right screen:
+ *  CS2 15
+ *  RST2 12
+ *  Shared, both screens:
  *  SCk 14
  *  SDA 13 
- *  RST 16
  *  DC   5
- *  LCD  nc
- *  CS   4
+ *  LCD  2
+ *  and 3.3V and Ground, obviously. 
+ *  
  * At init screen is reset, so thaty cannot share a reset pin, the first screen
  * will be initialized when the second screen does a reset as part of the init.
  */
@@ -79,12 +96,18 @@ typedef Adafruit_ST7789 displayType;
 
 
 // Enable ONE of these #includes for the various eyes:
-  #include "defaultEye.h"        // Standard human-ish hazel eye
+#include "defaultEye.h"        // Standard human-ish hazel eye
 //#include "noScleraEye.h"       // Large iris, no sclera
 //#include "dragonEye.h"         // Slit pupil fiery dragon/demon eye
 //#include "goatEye.h"           // Horizontal pupil goat/Krampus eye
+//#include "CatEye.h"
+//#include "naugaEye.h"
+//#include "doeEye.h"
+//#include "naugaEye.h"
+//#include "newtEye.h"
+//#include "terminatorEye.h"
 
-#define PIXEL_DOUBLE
+#define PIXEL_DOUBLE //uncomment to get tiny eyes in a tiny window. (Nobody wants that).
 #ifdef PIXEL_DOUBLE
   // For the 240x240 TFT, pixels are rendered in 2x2 blocks for an
   // effective resolution of 120x120. M0 boards just don't have the
@@ -118,9 +141,9 @@ typedef Adafruit_ST7789 displayType;
 //#define IRIS_SMOOTH       // If enabled, filter input from IRIS_PIN
 #define IRIS_MIN      140 // Clip lower analogRead() range from IRIS_PIN
 #define IRIS_MAX      260 // Clip upper "
-#define WINK_L_PIN      0 // Pin for LEFT eye wink button
+//#define WINK_L_PIN      0 // Pin for LEFT eye wink button
 #define BLINK_PIN       0 // Pin for blink button (BOTH eyes)
-#define WINK_R_PIN      0 // Pin for RIGHT eye wink button
+//#define WINK_R_PIN      0 // Pin for RIGHT eye wink button
 
 #define AUTOBLINK       1  // If enabled, eyes blink autonomously
 
@@ -145,8 +168,8 @@ struct {
   eyeBlink    blink;   // Current blink state
   uint16_t    bgcolor;
 } eye[] = { // OK to comment out one of these for single-eye display:
-  displayType(TFT_CS,TFT_DC, TFT_RST),TFT_CS,{WINK_L_PIN,NOBLINK},ST77XX_BLACK, 
-  displayType(TFT_CS2,TFT_DC,TFT_RST2),TFT_CS2,{WINK_R_PIN,NOBLINK},ST77XX_BLACK
+  displayType(TFT_CS,TFT_DC, TFT_RST),TFT_CS,{NOBLINK},ST77XX_BLACK, 
+  displayType(TFT_CS2,TFT_DC,TFT_RST2),TFT_CS2,{NOBLINK},ST77XX_BLACK
 };
 
 #define NUM_EYES (sizeof(eye) / sizeof(eye[0]))
@@ -154,7 +177,37 @@ struct {
 uint32_t fstart = 0;  // start time to improve frame rate calculation at startup
 
 
+//--------------------------------------------------------------------------
+void eyesOn(){
 
+   Serial.println("Eyes on");
+
+    eyeState = true;
+    for ( int i ; i < NUM_EYES; ++i ){
+      eye[i].tft.enableSleep( false);
+    }
+    digitalWrite(TFT_LCD, HIGH);  
+}
+//--------------------------------------------------------------------------
+void eyesOff(){
+    Serial.println("Eyes off");
+
+    eyeState = false;
+
+    for ( int i ; i < NUM_EYES; ++i ){
+      eye[i].tft.enableSleep( true );
+    }
+    digitalWrite(TFT_LCD, LOW );  
+  
+}
+//--------------------------------------------------------------------------
+void inline checkEyes(){
+
+  if ( mqEyes != eyeState ){
+    mqEyes?eyesOn():eyesOff(); 
+  }
+    
+}
 
 // INITIALIZATION -- runs once at startup ----------------------------------
 
@@ -166,16 +219,30 @@ void setup(void) {
     randomSeed( esp_random() ); // Seed random() from floating analog input
 #endif
 #ifdef ESP8266    
-    WiFi.forceSleepBegin();                  // turn off ESP8266 RF
-    delay(1);                  
-    randomSeed(analogRead(A0)); 
+//    WiFi.forceSleepBegin();                  // turn off ESP8266 RF
+//    delay(1);                  
+//    randomSeed(analogRead(A0)); 
 #endif
+
+  WiFi.hostname(esphostname);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    WiFi.begin(ssid, password);
+    Serial.println("WiFi failed, retrying.");
+  }
+  Serial.print("WiFi connected, IP address ");
+  Serial.println(WiFi.localIP());
+
 
   if (! FSYS.begin()) {
     Serial.printf("Unable to begin() LittleFS, aborting\n");
   }else{
     listDir("/",0);
   }
+
+  mqtt_init();
+  
   for ( e = 0; e < NUM_EYES; ++e ){
 
     digitalWrite( eye[e].cs, LOW);    
@@ -184,7 +251,7 @@ void setup(void) {
     eye[e].tft.setRotation( 2 ); 
     eye[e].tft.fillScreen( eye[e].bgcolor );
         
-    delay(2000);
+    delay(20);
    }
 
     eye[0].tft.startWrite();
@@ -192,6 +259,9 @@ void setup(void) {
     madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;    
     eye[0].tft.sendCommand( ST77XX_MADCTL,&madctl,1 ); 
     eye[0].tft.endWrite();
+
+    pinMode(TFT_LCD, OUTPUT);
+    eyesOn();
   
   Serial.printf( "\nNori\'s Grote Oog \nscreen width %d Screen height %d\n", eye[0].tft.width(),eye[0].tft.height() );
   Serial.printf( "CS 0 : %d, CS 1 : %d\n", eye[0].cs,eye[1].cs );
@@ -240,11 +310,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   // around automatically from end of rect back to beginning, the region is
   // reset on each frame here in case of an SPI glitch.
 
-  //eye[e].tft.setAddrWindow(319-127, 0, 319, 127);
-  //eye[e].tft.setAddrWindow(0, 0, 127, 127);
-  // ST7735 eye[e].tft.setAddrWindow(25, 0, 128, 160);
-  //eye[e].tft.setAddrWindow(50, 40, 128, 160);// screenw&h 128
-  //eye[e].tft.setAddrWindow(55, 20, 20, 20);//blurb
+  
 #ifdef PIXEL_DOUBLE
  eye[e].tft.startWrite();
   eye[e].tft.setAddrWindow(0, 0, 240, 240);
@@ -257,12 +323,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   
   // Now just issue raw 16-bit values for every pixel...
 
-   //scleraXsave = scleraX; // Save initial X value to reset on each line
-   //irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
-   //for(screenY=0; screenY<screen_HEIGHT; screenY++, scleraY++, irisY++) {
-   // scleraX = scleraXsave;
-   // irisX   = scleraXsave - (SCLERA_WIDTH - IRIS_WIDTH) / 2;
-   // for(screenX=0; screenX<screen_WIDTH; screenX++, scleraX++, irisX++) {
+   
       scleraXsave = scleraX + SCREEN_X_START; // Save initial X value to reset on each line
       irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
       for(screenY=SCREEN_Y_START; screenY<SCREEN_Y_END; screenY++, scleraY++, irisY++) {
@@ -289,7 +350,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
       }
       *(pbuffer + pixels++) = p;
 #ifdef PIXEL_DOUBLE
-      *(pbuffer + pixels++) = p; //p>>8 | p<<8;
+      *(pbuffer + pixels++) = p; //p>>8 | p<<8;// for esp8266 no flip of bytes necessary, for pixel double write the same word again
 #endif
       if (pixels >= BUFFER_SIZE) { 
 
@@ -299,7 +360,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
 //              for (uint16_t i = 0; i < BUFFER_SIZE; i++)SPI.write16(pbuffer[i]);
             
             eye[e].tft.writePixels(pbuffer, sizeof(pbuffer)/2 );
-#ifdef PIXEL_DOUBLE
+#ifdef PIXEL_DOUBLE // write the same line again
             eye[e].tft.writePixels(pbuffer, sizeof(pbuffer)/2 );
 #endif
             eye[e].tft.endWrite();
@@ -310,8 +371,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
     }
   }
 
-   if (pixels) { Serial.println("restje!");//eye[e].tft.pushColors(pbuffer, pixels); pixels = 0;}
-   //eye[e].tft.endWrite();
+   if (pixels) { Serial.println("leftover! Should not happen!");//eye[e].tft.pushColors(pbuffer, pixels); pixels = 0;}
      
   
   }
@@ -394,7 +454,7 @@ void frame( uint32_t iScale)
   }
 
   // Blinking
-///*
+
 #ifdef AUTOBLINK
   // Similar to the autonomous eye movement above -- blink start times
   // and durations are random (within ranges).
@@ -412,8 +472,7 @@ void frame( uint32_t iScale)
     timeToNextBlink = blinkDuration * 3 + random(4000000);
   }
 #endif
-//*/
-///*
+
   if(eye[eyeIndex].blink.state) { // Eye currently blinking?
     // Check if current blink state time has elapsed
     if((t - eye[eyeIndex].blink.startTime) >= eye[eyeIndex].blink.duration) {
@@ -448,9 +507,8 @@ void frame( uint32_t iScale)
       eye[eyeIndex].blink.duration  = random(45000, 90000);
     }
   }
-//*/
-  // Process motion, blinking and iris scale into renderable values
 
+  // Process motion, blinking and iris scale into renderable values
   // Iris scaling: remap from 0-1023 input to iris map height pixel units
   iScale = ((IRIS_MAP_HEIGHT + 1) * 1024) /
            (1024 - (iScale * (IRIS_MAP_HEIGHT - 1) / IRIS_MAP_HEIGHT));
@@ -552,30 +610,32 @@ void split( // Subdivides motion path into two sub-paths w/randimization
 
 void loop() {
 
-#if defined(IRIS_PIN) && (IRIS_PIN >= 0) // Interactive iris
+if ( mqEyes ){
+  #if defined(IRIS_PIN) && (IRIS_PIN >= 0) // Interactive iris
+    uint16_t v = 512; //analogRead(IRIS_PIN);       // Raw dial/photocell reading
+    #ifdef IRIS_PIN_FLIP
+      v = 1023 - v;
+    #endif
+    v = map(v, 0, 1023, IRIS_MIN, IRIS_MAX); // Scale to iris range
+    #ifdef IRIS_SMOOTH // Filter input (gradual motion)
+      static uint16_t irisValue = (IRIS_MIN + IRIS_MAX) / 2;
+      irisValue = ((irisValue * 15) + v) / 16;
+      frame(irisValue);
+    #else // Unfiltered (immediate motion)
+      frame(v);
+    #endif // IRIS_SMOOTH
+  #else  // Autonomous iris scaling -- invoke recursive function
+    newIris = random(IRIS_MIN, IRIS_MAX);
+    split(oldIris, newIris, micros(), 10000000L, IRIS_MAX - IRIS_MIN);
+    oldIris = newIris;
+  #endif // IRIS_PIN
+}else{// mqEyes
+  if (digitalRead(BLINK_PIN) == LOW){
+    mqEyes = true;
+  }
+}
+mqtt_check();
+checkEyes();
 
-  uint16_t v = 512; //analogRead(IRIS_PIN);       // Raw dial/photocell reading
-#ifdef IRIS_PIN_FLIP
-  v = 1023 - v;
-#endif
-  v = map(v, 0, 1023, IRIS_MIN, IRIS_MAX); // Scale to iris range
-#ifdef IRIS_SMOOTH // Filter input (gradual motion)
-  static uint16_t irisValue = (IRIS_MIN + IRIS_MAX) / 2;
-  irisValue = ((irisValue * 15) + v) / 16;
-  frame(irisValue);
-#else // Unfiltered (immediate motion)
-  frame(v);
-#endif // IRIS_SMOOTH
-
-#else  // Autonomous iris scaling -- invoke recursive function
-
-  newIris = random(IRIS_MIN, IRIS_MAX);
-  split(oldIris, newIris, micros(), 10000000L, IRIS_MAX - IRIS_MIN);
-  oldIris = newIris;
-
-#endif // IRIS_PIN
-
-//screenshotToConsole();
- 
-delay(1000);
+delay( 200 );
 }

@@ -10,7 +10,20 @@
    madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;    
     eye[0].tft.sendCommand( ST77XX_MADCTL,&madctl,1 ); 
  
+ 
  Also ported pixel doubling from https://learn.adafruit.com/animated-electronic-eyes/overview
  This gives a scarier effect, which is the point I think.
- Unfortunately the graphics files from that project are not compatible for
- reasons unknown to me.
+ 
+ The graphics files from that project have been converted to a format,this (older) version
+ of the uncanny eyes using tablegen_oldstyle.py in the convert directory. 
+ For original graphics see the original code at https://github.com/adafruit/Uncanny_Eyes
+ 
+ Eyes are made to react on a proximity sensor which publishes it's status on mqtt.
+ 
+
+ Wifi SSID and password, mqtt server, username and passwordare stored in a headerfile
+ wificredentials.h, which should contain the following variables with your own info:
+
+ ssid, password, mqttServer, mqttPort, mqttUser, mqttPassword.
+
+Security was not taken into account for this design. Yes, I know.
