@@ -1,6 +1,7 @@
 # NoriBigEye
  UncannyEyesExample of tft_eSPI library reworked
- 
+ <img src="images/bigeye.jpg" />
+
  This is an ESP8266 project. It uses all but 2 GPIO's (0 and A0).
  Results seem to improve if the ESP8266 is run at 160MHz.
  It is built to show off the nice little 240x240 ST7789 displays,
