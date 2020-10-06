@@ -47,6 +47,11 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #define FSYS LittleFS
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+#define ST_PINK 0xF999
 
 WiFiClient mqWifiClient;
 PubSubClient mqclient(mqWifiClient);
@@ -75,7 +80,7 @@ typedef Adafruit_ST7789 displayType;
   #define TFT_RST2       12 
   #define TFT_LCD         2
 
-/*  connections:
+/*  ``````````````````````````````````````1connections:
  *  Left Screen:
  *  CS   4
  *  RST 16
@@ -242,6 +247,7 @@ void setup(void) {
   }
 
   mqtt_init();
+  initOTA();
   
   for ( e = 0; e < NUM_EYES; ++e ){
 
@@ -635,6 +641,7 @@ if ( mqEyes ){
   }
 }
 mqtt_check();
+ArduinoOTA.handle();
 checkEyes();
 
 delay( 200 );
