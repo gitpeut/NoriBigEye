@@ -10,10 +10,9 @@
  unfortunately. Now, the Adafruit GFX lib is used.
 
  The left eye ( seen from the front) is mirrored by telling the left display
- to have the X coordinate start at the right side.
- 
+ to have the X coordinate start at the right side. <br />
    <code>
-   madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;    
+   madctl = ST77XX_MADCTL_MX|ST77XX_MADCTL_RGB;<br />    
    eye[0].tft.sendCommand( ST77XX_MADCTL,&madctl,1 ); 
    </code>
  
