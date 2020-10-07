@@ -28,13 +28,15 @@
  gcc to choke, it finds null characters every other position.
  Workaround: load the generated .h file in Notepad++, choose encoding, convert to ascii.
  
+ For fun I edited the Iris file of defaultEye and filleda lot of the colours woth red.
+ see redEye.h. Looks like a zombie. 
  
  Eyes are made to react on a proximity sensor which publishes it's status on mqtt.
  
  Wifi SSID and password, mqtt server, username and passwordare stored in a headerfile
  wificredentials.h, which should contain the following variables with your own info:
 
- ssid, password, mqttServer, mqttPort, mqttUser, mqttPassword.
+ ssid, password, mqttServer, mqttPort, mqttUser, mqttPassword and MQtopic names proxtopic and statustopic.
 
  Added OTA (over-the-air) update capability, so eyetypes can be changed fairly effortlessly.
  
