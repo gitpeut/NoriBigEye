@@ -24,6 +24,10 @@
  The graphics files from that project have been converted to a format this (older) version
  of the uncanny eyes project understands, using tablegen_oldstyle.py in the convert directory. 
  For original graphics see the original code at https://github.com/adafruit/Uncanny_Eyes
+ NB when redirecting the output to a file on Windows, double width characters are written, which causes
+ gcc to choke, it finds null characters every other position.
+ Workaround: load the generated .h file in Notepad++, choose encoding, convert to ascii.
+ 
  
  Eyes are made to react on a proximity sensor which publishes it's status on mqtt.
  

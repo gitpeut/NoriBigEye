@@ -28,10 +28,9 @@ if ( !mqclient.connected() ) {
       disconcount=0;
 
     // Subscriptions
-    sprintf( mqid, "Door/proximity");
-    mqclient.subscribe( mqid ); 
-    sprintf( mqid, "Door/status");
-    mqclient.subscribe( mqid ); 
+    
+    mqclient.subscribe( proxtopic ); 
+    mqclient.subscribe( statustopic ); 
 
       
 } else {
@@ -92,10 +91,10 @@ bool mqtt_callback(char* topic, byte *payload, unsigned int len) {
 
    Serial.printf("MQ message received on topic %s, mqEyes is now %d\n", topic, mqEyes ); 
 
-   if ( 0 == strcmp( topic, "Buitenlamp/out/proximity") ){
+   if ( 0 == strcmp( topic, proxtopic) ){
         mqEyes = payloadz["proximity"];
    }
-   if ( 0 == strcmp( topic, "Buitenlamp/out/status") ){
+   if ( 0 == strcmp( topic, statustopic) ){
         const char  *proxs = payloadz["ProxOnOff"];
         
         if (  0 == strcmp( proxs, "On") ) {

@@ -38,6 +38,7 @@
 // Inspired by David Boccabella's (Marcwolf) hybrid servo/OLED eye concept.
 //--------------------------------------------------------------------------
 */
+#define NORIBIGEYE // used to fetch credentials etc. from wificredentials
 
 #ifdef ESP8266
 #include "ESP8266WiFi.h"
@@ -67,6 +68,7 @@ extern "C" {
 
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
+
 
 const char *esphostname = "NoriBigEyes";                                 
 
@@ -101,7 +103,9 @@ typedef Adafruit_ST7789 displayType;
 
 
 // Enable ONE of these #includes for the various eyes:
-#include "defaultEye.h"        // Standard human-ish hazel eye
+//#include "defaultEye.h"        // Standard human-ish hazel eye
+#include "redEye.h"        // Standard human-ish hazel eye
+
 //#include "noScleraEye.h"       // Large iris, no sclera
 //#include "dragonEye.h"         // Slit pupil fiery dragon/demon eye
 //#include "goatEye.h"           // Horizontal pupil goat/Krampus eye
@@ -641,6 +645,7 @@ if ( mqEyes ){
   }
 }
 mqtt_check();
+
 ArduinoOTA.handle();
 checkEyes();
 
