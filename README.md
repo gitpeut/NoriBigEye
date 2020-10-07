@@ -32,4 +32,13 @@
 
  ssid, password, mqttServer, mqttPort, mqttUser, mqttPassword.
 
-Security was not taken into account for this design. Yes, I know.
+ Added OTA (over-the-air) update capability, so eyetypes can be changed fairly effortlessly.
+ 
+ WARNING: Security was not taken into account for this design.
+ 
+ In OpenSCAD designed and printed a pillbox to contain the eyes. It's not perfect and as I 
+ use my own boards with particular sizes this is of limited use for others. But for reference,
+ the OpenSCAD sources are in directory 3dbox.
+ 
+ <img src="images/bigeye2.jpg" />
+ 
