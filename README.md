@@ -28,7 +28,7 @@
  gcc to choke, it finds null characters every other position.
  Workaround: load the generated .h file in Notepad++, choose encoding, convert to ascii.
  
- For fun I edited the Iris file of defaultEye and filleda lot of the colours woth red.
+ For fun I edited the Iris file of defaultEye and filled a lot of the colours with red.
  see redEye.h. Looks like a zombie. 
  
  Eyes are made to react on a proximity sensor which publishes it's status on mqtt.
