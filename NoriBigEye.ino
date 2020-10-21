@@ -40,7 +40,6 @@
 */
 #define NORIBIGEYE // used to fetch credentials etc. from wificredentials
 
-#ifdef ESP8266
 #include "ESP8266WiFi.h"
 #include <FS.h>
 #include <LittleFS.h>
@@ -54,20 +53,21 @@
 
 #define ST_PINK 0xF999
 
-WiFiClient mqWifiClient;
-PubSubClient mqclient(mqWifiClient);
-bool       mqEyes   = true;
-bool       eyeState = true;
 
 extern "C" {
 #include "user_interface.h"
 }
-#endif
 
 #include <Adafruit_GFX.h>    // Core graphics library
-
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
+
+WiFiClient mqWifiClient;
+PubSubClient mqclient(mqWifiClient);
+bool       mqEyes   = false;
+bool       eyeState = true;
+
+
 
 
 const char *esphostname = "NoriBigEyes";                                 
@@ -103,9 +103,8 @@ typedef Adafruit_ST7789 displayType;
 
 
 // Enable ONE of these #includes for the various eyes:
-//#include "defaultEye.h"        // Standard human-ish hazel eye
-#include "redEye.h"        // Standard human-ish hazel eye
-
+#include "defaultEye.h"        // Standard human-ish hazel eye
+//#include "redEye.h"        // Standard human-ish hazel eye
 //#include "noScleraEye.h"       // Large iris, no sclera
 //#include "dragonEye.h"         // Slit pupil fiery dragon/demon eye
 //#include "goatEye.h"           // Horizontal pupil goat/Krampus eye
@@ -247,7 +246,7 @@ void setup(void) {
   if (! FSYS.begin()) {
     Serial.printf("Unable to begin() LittleFS, aborting\n");
   }else{
-    listDir("/",0);
+    //listDir("/",0);
   }
 
   mqtt_init();
@@ -271,14 +270,16 @@ void setup(void) {
     eye[0].tft.endWrite();
 
     pinMode(TFT_LCD, OUTPUT);
-    eyesOn();
+    
   
   Serial.printf( "\nNori\'s Grote Oog \nscreen width %d Screen height %d\n", eye[0].tft.width(),eye[0].tft.height() );
   Serial.printf( "CS 0 : %d, CS 1 : %d\n", eye[0].cs,eye[1].cs );
   
+  
   fstart = millis()-1; // Subtract 1 to avoid divide by zero late
 }
 
+//------------------------------------------------------------------------------------------------
 
 // EYE-RENDERING FUNCTION --------------------------------------------------
 

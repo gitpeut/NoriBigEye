@@ -7,8 +7,38 @@
 #endif
 
 
-/*-----------------------------------------------------------------*/
+const char *resetreasons[] PROGMEM = { "Normale poweron reset", "Hardware watchdog reset", "Exception reset", "Software watchdog reset", "Software restart", "Deepsleep wakup", "External system reset" }; 
+//------------------------------------------------------------------------------------------
 
+void publish_resetreason(){
+  
+static bool sentreason = false;
+rst_info *resetInfo;
+
+if ( sentreason )return;
+
+resetInfo = ESP.getResetInfoPtr();;
+
+enum rst_reason {
+ REASON_DEFAULT_RST = 0,  /* normal startup by power on */
+ REASON_WDT_RST = 1,      /* hardware watch dog reset */
+ REASON_EXCEPTION_RST = 2, /* exception reset, GPIO status won't change */
+ REASON_SOFT_WDT_RST   = 3, /* software watch dog reset, GPIO status won't change */
+ REASON_SOFT_RESTART = 4, /* software restart ,system_restart , GPIO status won't change */
+ REASON_DEEP_SLEEP_AWAKE = 5, /* wake up from deep-sleep */
+ REASON_EXT_SYS_RST      = 6 /* external system reset */
+};
+
+
+ mqclient.publish( "NoriBigEye/out", resetreasons[ resetInfo->reason ], true);
+
+
+sentreason = true;  
+}
+
+
+
+//------------------------------------------------------------------------------------------
 boolean mqtt_reconnect() {
 
 static int disconcount=0;
@@ -27,11 +57,13 @@ if ( !mqclient.connected() ) {
       Serial.println("connected");
       disconcount=0;
 
+    
     // Subscriptions
     
     mqclient.subscribe( proxtopic ); 
     mqclient.subscribe( statustopic ); 
 
+    publish_resetreason();
       
 } else {
       
